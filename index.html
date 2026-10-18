@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#29265d"><title>把心事交给鸟</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#101b49}canvas{display:block;width:100%;height:100%;touch-action:manipulation}form{position:fixed;left:50%;bottom:max(26px,env(safe-area-inset-bottom));width:min(340px,calc(100% - 56px));transform:translateX(-50%);display:flex;align-items:center;gap:6px;transition:opacity .6s}
+input{min-width:0;flex:1;padding:10px 4px;border:0;border-bottom:1px solid #c4dcff2e;border-radius:0;background:transparent;outline:0;color:#eaf4ff;caret-color:#cfe6ff;font:15px "Songti SC","SimSun",serif;letter-spacing:.12em;text-align:center;transition:border-color .4s}
+input::placeholder{color:#cfe2ff55}input:focus{border-bottom-color:#d4edff99}
+button{display:grid;place-items:center;width:40px;height:40px;padding:0;border:0;border-radius:50%;background:transparent;color:#e4f1ff;opacity:.9;cursor:pointer;transition:opacity .3s,background .3s}
+button svg{width:30px;height:20px;transform-origin:50% 75%;filter:drop-shadow(0 0 4px #8cc4ff99)}
+form.empty button{opacity:.35}button:hover,form.empty button:hover{opacity:1;background:#abcfff14}
+button:hover svg{animation:flap .45s ease-in-out infinite alternate}
+form.busy{opacity:.35}form.busy button{cursor:default}form.busy svg{animation:flap .4s ease-in-out infinite alternate}
+@keyframes flap{to{transform:scaleY(.5)}}
+button:focus-visible{outline:1px solid #fff;outline-offset:2px}
+@media(max-width:600px){input{font-size:16px}}
+</style></head><body><canvas aria-hidden="true"></canvas><form class="empty" autocomplete="off"><input aria-label="写下想放飞的文字" maxlength="24" placeholder="写下一句，让鸟群带走…" spellcheck="false"><button aria-label="放飞" type="submit"><svg viewBox="0 0 36 24" fill="currentColor" aria-hidden="true"><path d="M18 14C14 8 8 5 2 5C7 9 11 13 16 17Z"/><path d="M18 14C22 8 28 5 34 5C29 9 25 13 20 17Z"/><ellipse cx="18" cy="16" rx="2.2" ry="3.4"/><circle cx="18" cy="12.2" r="1.7"/><path d="M16.4 18.5L18 23.5L19.6 18.5Z"/></svg></button></form>
+<script>
+'use strict';
+const cv=document.querySelector('canvas'),form=document.querySelector('form'),input=document.querySelector('input');
+let g=cv.getContext('2d'),backLayer,treeLayer,starSprites=[];
+const TAU=Math.PI*2,clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v)),lerp=(a,b,t)=>a+(b-a)*t,ease=t=>t*t*(3-2*t),random=(a,b)=>a+Math.random()*(b-a);
+let W,H,D,moon,branches=[],foliage=[],perches=[],birds=[],letters=[],stars=[],dust=[],motes=[],time=0,last=0,busy=false,pointer={x:-999,y:-999},disturbAt=-10,nextIdle=6;
+function seeded(n){return()=>((n=(n*16807)%2147483647)-1)/2147483646}
+function cubic(a,b,c,d,t){let u=1-t;return{x:u*u*u*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t*t*t*d.x,y:u*u*u*a.y+3*u*u*t*b.y+3*u*t*t*c.y+t*t*t*d.y}}
+function branchPoint(b,t){return cubic(b.a,b.b,b.c,b.d,t)}
+function setup(){W=innerWidth||document.documentElement.clientWidth||360;H=innerHeight||document.documentElement.clientHeight||640;D=Math.min(devicePixelRatio||1,2,Math.sqrt(5200000/(W*H)));cv.width=W*D;cv.height=H*D;const mobile=W<600;moon={x:W*(mobile?.24:.23),y:H*.205,r:Math.min(W*(mobile?.12:.068),H*.105)};branches=[];foliage=[];perches=[];const rd=seeded(761);
+function grow(a,angle,len,width,depth,opacity){const stretch=Math.min(W/H,1.6)*.68;const bend=(rd()-.5)*.24;const d={x:a.x+Math.sin(angle)*len*stretch,y:a.y-Math.cos(angle)*len};const branch={a,b:{x:a.x+Math.sin(angle+bend)*len*.32*stretch,y:a.y-Math.cos(angle+bend)*len*.32},c:{x:d.x-Math.sin(angle-bend)*len*.27*stretch,y:d.y+Math.cos(angle-bend)*len*.27},d,width,opacity};branches.push(branch);
+if(depth>=2&&depth<=4){for(const t of [.55,.83]){const p=branchPoint(branch,t);if(p.x>W*.43&&p.x<W*.96&&p.y>H*.3&&p.y<H*.87)perches.push({...p,y:p.y-2,opacity});}}
+if(depth>=6){for(let j=0;j<4;j++){const theta=rd()*TAU,rr=rd()*9;foliage.push({x:d.x+Math.cos(theta)*rr,y:d.y+Math.sin(theta)*rr,r:.9+rd()*1.5,angle:rd()*TAU,opacity:opacity*(.25+rd()*.5)})}return;}
+const spread=.26+rd()*.29;grow(d,clamp(angle-spread,-1.35,1.35),len*(.64+rd()*.12),width*.66,depth+1,opacity*.94);grow(d,clamp(angle+spread*(.8+rd()*.35),-1.35,1.35),len*(.65+rd()*.13),width*.64,depth+1,opacity*.92);
+if(depth>=1&&depth<=3&&rd()>.5){const q=branchPoint(branch,.58);grow(q,angle+(rd()>.5?1:-1)*.85,len*.5,width*.49,depth+1,opacity*.75);}}
+grow({x:W*.8,y:H*1.06},-.22,H*.26,4.6,0,.94);
+grow({x:W*1.025,y:H*1.08},-.3,H*.21,3,0,.32);
+const moved=new Set();for(const b of branches)for(const p of [b.a,b.b,b.c,b.d]){if(!moved.has(p)){p.y+=H*.1;moved.add(p)}}for(const f of foliage)f.y+=H*.1;for(const p of perches)p.y+=H*.1;
+const spaced=[];for(const p of perches.map(p=>({...p,order:rd()})).sort((a,b)=>a.order-b.order)){if(spaced.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>(mobile?18:30)))spaced.push(p);}
+for(const p of perches){if(spaced.length>=24)break;if(spaced.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>8))spaced.push(p);}
+perches=spaced.slice(0,24);birds=perches.map((p,i)=>({home:p,x:p.x,y:p.y,state:'rest',phase:rd()*TAU,face:i%2?1:-1,size:mobile?.95:1.15,t:0,delay:0,letter:null,alpha:1,trail:[],sparkTimer:0}));letters=[];dust=[];busy=false;nextIdle=time+random(4,7);form.classList.remove('busy');input.disabled=false;form.querySelector('button').disabled=false;
+stars=Array.from({length:200},()=>({x:rd()*W,y:rd()*H,a:rd()*.6+.2,r:rd()>.93?1.4:rd()*.65+.3,phase:rd()*TAU,speed:.4+rd()*1.5}));
+motes=Array.from({length:36},()=>({x:rd()*W,y:rd()*H,r:rd()*1.3+.5,speed:rd()*6+3,phase:rd()*TAU}));buildLayers();
+}
+function wind(p){const strength=clamp((H*1.16-p.y)/H);return{x:p.x+(Math.sin(time*.55)+.24*Math.sin(time*.93))*10*strength,y:p.y+Math.sin(time*.55+.6)*1.05*strength};}
+function burst(x,y,count=16){for(let i=0;i<count;i++)dust.push({x,y,vx:random(-22,22),vy:random(-18,23),life:0,max:random(.7,2.3),r:random(.6,1.8)});}
+function glyphPosition(c){return{x:c.x+Math.sin((time-c.born)*.8+c.phase)*1.2,y:c.y+Math.sin((time-c.born)*1.1+c.phase)*3};}
+function path(b,start,c1,c2,end,duration,state){Object.assign(b,{start,c1,c2,end,duration,state,t:0});}
+function scatter(b,delay=0){if(b.state!=='rest')return;b.delay=delay;b.letter=null;b.state='waiting';b.next='wander';b.waitPerched=true}
+function wander(b){const side=b.home.x>W*.7?-1:1;path(b,{x:b.x,y:b.y},{x:b.x+side*W*.21,y:b.y-H*.28},{x:b.x-side*W*.11,y:b.y-H*.33},{x:b.home.x+side*W*.12,y:b.home.y-H*.16},random(2.8,4),'wander');}
+function returnHome(b){path(b,{x:b.x,y:b.y},{x:b.x+W*.06,y:b.y-H*.06},{x:b.home.x-W*.05,y:b.home.y-H*.08},{x:b.home.x,y:b.home.y},random(2,3),'return');}
+function disturb(x,y,radius){if(time-disturbAt<.2)return;let found=false;for(const b of birds){if(b.state==='rest'&&Math.hypot(b.x-x,b.y-y)<radius){scatter(b,random(0,.22));found=true}}if(found)disturbAt=time;}
+cv.addEventListener('pointermove',e=>{pointer={x:e.clientX,y:e.clientY};if(e.pointerType!=='touch')disturb(pointer.x,pointer.y,48)});cv.addEventListener('pointerdown',e=>disturb(e.clientX,e.clientY,W<600?115:160));cv.addEventListener('pointerleave',()=>pointer={x:-999,y:-999});
+input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(!e.isComposing&&e.keyCode!==229)send()}});input.addEventListener('input',()=>form.classList.toggle('empty',!input.value.trim()));
+const send=()=>{if(busy||!input.value.trim()||!birds.length)return;const chars=Array.from(input.value.trim()).slice(0,Math.min(24,birds.length)),font=clamp(Math.round(H*.04),W<600?22:26,40),cols=W<600?6:12;busy=true;input.disabled=true;input.blur();form.classList.add('busy');form.querySelector('button').disabled=true;const rowW=Math.min(cols,chars.length)*font*1.45,cx=clamp(moon.x,rowW/2+16,W-rowW/2-16);
+letters=chars.map((char,i)=>{const row=Math.floor(i/cols),n=Math.min(cols,chars.length-row*cols);return{char,x:cx+((i%cols)-(n-1)/2)*font*1.45,y:moon.y+moon.r+font*1.6+row*font*1.7+Math.sin(i*.7)*font*.07,font,phase:i*1.7,rotation:Math.sin(i*2.4)*.03,held:false,gone:false,born:time}});
+const available=birds.slice().sort((a,b)=>(a.state==='rest'?0:1)-(b.state==='rest'?0:1));letters.forEach((c,i)=>{const b=available[i];b.waitPerched=b.state==='rest';b.letter=c;b.state='waiting';b.next='fetch';b.delay=1.25+i*.32;b.alpha=1;b.trail=[]});input.value='';form.classList.add('empty');};
+form.addEventListener('submit',e=>{e.preventDefault();send()});form.querySelector('button').addEventListener('click',e=>{e.preventDefault();send()});
+function update(dt){time+=dt;if(!busy&&time>=nextIdle){if(birds.every(b=>b.state==='rest')){const pool=birds.filter(b=>b.y<H*.88);const first=pool[Math.floor(Math.random()*pool.length)];if(first){scatter(first);if(Math.random()<.38){const others=pool.filter(b=>b!==first&&Math.hypot(b.x-first.x,b.y-first.y)>35);if(others.length)scatter(others[Math.floor(Math.random()*others.length)],random(.55,1.15));}}}nextIdle=time+random(12,19);}for(const s of dust){s.life+=dt;s.x+=s.vx*dt;s.y+=s.vy*dt;s.vy+=dt*5}dust=dust.filter(s=>s.life<s.max);for(const m of motes){m.y-=m.speed*dt;m.x+=Math.sin(time*.3+m.phase)*dt*3;if(m.y<-10){m.y=H+10;m.x=random(0,W)}}for(const b of birds){if(b.state==='rest'){const p=wind(b.home);b.x=p.x;b.y=p.y;continue;}if(b.state==='waiting'){if(b.waitPerched){const p=wind(b.home);b.x=p.x;b.y=p.y;}b.delay-=dt;if(b.delay<=0){if(b.next==='wander')wander(b);else{const c=glyphPosition(b.letter);path(b,{x:b.x,y:b.y},{x:b.x-W*.09,y:b.y-H*.25},{x:c.x+W*.1,y:c.y-H*.09},{x:c.x-6,y:c.y-17},random(1.8,2.7),'fetch')}}continue;}
+if(b.state==='return')b.end=wind(b.home);b.t=clamp(b.t+dt/b.duration);const t=b.t,p=cubic(b.start,b.c1,b.c2,b.end,b.state==='return'||b.state==='fetch'?ease(t):t);b.angle=Math.atan2(p.y-b.y,Math.abs(p.x-b.x)+.001)*.32;b.face=p.x>=b.x?1:-1;b.x=p.x;b.y=p.y;b.phase+=dt*10;if(b.state==='carry'){b.trail.push({x:b.x,y:b.y});if(b.trail.length>32)b.trail.shift();b.sparkTimer-=dt;if(b.sparkTimer<=0){burst(b.x,b.y+17,2);b.sparkTimer=.055}}else if(b.trail.length)b.trail.shift();
+if(b.state==='carry')b.alpha=1-ease(clamp((t-.68)/.32));else if(b.state==='return')b.alpha=Math.min(1,b.alpha+dt*.7);
+if(t>=1){if(b.state==='fetch'){b.letter.held=true;burst(b.x,b.y+20,22);path(b,{x:b.x,y:b.y},{x:b.x-W*.1,y:b.y-H*.12},{x:W*.32,y:H*.08},{x:W*.54,y:-70},5.2,'carry')}
+else if(b.state==='carry'){b.letter.gone=true;b.letter=null;b.x=W*.85;b.y=-40;returnHome(b)}else if(b.state==='wander')returnHome(b);else if(b.state==='return'){b.state='rest';const p=wind(b.home);b.x=p.x;b.y=p.y;b.alpha=1;}}}
+if(busy&&letters.every(c=>c.gone)){busy=false;letters=[];input.disabled=false;form.querySelector('button').disabled=false;form.classList.remove('busy');}}
+function drawBird(b){g.save();g.translate(b.x,b.y);g.scale(b.size*b.face,b.size);g.globalAlpha=b.alpha*Math.max(.65,b.home.opacity);g.shadowColor='#92d5ff';g.shadowBlur=12;g.strokeStyle='#effbff';g.fillStyle='#effbff';g.lineWidth=.95;g.lineCap='round';if(b.state==='rest'||b.state==='waiting'){
+// Narrow tapered silhouette with a small head and a close-folded wing.
+g.shadowBlur=4;g.beginPath();g.moveTo(-10,4);g.bezierCurveTo(-7,-2,-5,-7,-2,-10);g.quadraticCurveTo(0,-12,3,-11);g.bezierCurveTo(4,-14,7,-15,8,-12);g.lineTo(11,-11);g.lineTo(8,-10);g.bezierCurveTo(6,-6,3,-4,0,-4);g.lineTo(-10,4);g.closePath();g.fill();g.shadowBlur=0;g.strokeStyle='rgba(106,168,204,.7)';g.lineWidth=.65;g.beginPath();g.moveTo(-4,-7);g.quadraticCurveTo(0,-5,4,-9);g.stroke();g.strokeStyle='rgba(230,247,255,.75)';g.lineWidth=.6;g.beginPath();g.moveTo(0,-4);g.lineTo(0,2);g.moveTo(2,-4);g.lineTo(2,2);g.stroke();
+}else{g.rotate(b.angle*b.face);const flap=Math.sin(b.phase),wing=8+flap*10;g.beginPath();g.moveTo(-16,-wing);g.lineTo(-3,-1);g.lineTo(2,0);g.lineTo(12,-wing*.78);g.lineTo(5,1);g.lineTo(0,2);g.closePath();g.globalAlpha*=.85;g.fill();g.beginPath();g.moveTo(-6,2);g.lineTo(-10,5);g.moveTo(1,0);g.lineTo(7,1);g.stroke();}g.restore();}
+function drawText(c,x,y,alpha,rot=0){g.save();g.translate(x,y);g.rotate(rot);g.globalAlpha=alpha;g.fillStyle='#f3fbff';g.shadowColor='#91ceff';g.shadowBlur=14;g.font=`${c.font}px "Songti SC","SimSun",serif`;g.textAlign='center';g.textBaseline='middle';g.fillText(c.char,0,0);g.restore();}
+function sparkle(x,y,r,alpha,cross=false){g.globalAlpha=clamp(alpha);if(!cross&&r<1.2){g.fillStyle='#e6f5ff';g.beginPath();g.arc(x,y,Math.max(.45,r*.8),0,TAU);g.fill()}else{const size=(cross?16:11)*r;g.drawImage(starSprites[cross?1:0],x-size/2,y-size/2,size,size)}g.globalAlpha=1;}
+function buildLayers(){const live=g;function layer(){const c=document.createElement('canvas');c.width=Math.ceil(W*D);c.height=Math.ceil(H*D);return c;}
+backLayer=layer();g=backLayer.getContext('2d');g.scale(D,D);
+const sky=g.createLinearGradient(0,0,W*.3,H);sky.addColorStop(0,'#070c28');sky.addColorStop(.55,'#111c4b');sky.addColorStop(1,'#1b2a63');g.fillStyle=sky;g.fillRect(0,0,W,H);
+const mh=g.createRadialGradient(moon.x,moon.y,0,moon.x,moon.y,Math.max(W,H)*.55);mh.addColorStop(0,'rgba(140,170,255,.26)');mh.addColorStop(.4,'rgba(100,130,230,.09)');mh.addColorStop(1,'rgba(80,110,210,0)');g.fillStyle=mh;g.fillRect(0,0,W,H);
+const vg=g.createLinearGradient(0,H*.7,0,H);vg.addColorStop(0,'rgba(6,10,32,0)');vg.addColorStop(1,'rgba(6,10,32,.5)');g.fillStyle=vg;g.fillRect(0,H*.7,W,H*.3);
+g.lineWidth=1;for(const [k,a0,sw,al] of [[1.7,.4,3.6,.16],[2.5,2.2,2.8,.1]]){g.strokeStyle='rgba(200,225,255,'+al+')';g.beginPath();g.arc(moon.x,moon.y,moon.r*k,a0,a0+sw);g.stroke()}
+// A smooth white crescent with a restrained light bloom.
+g.save();g.translate(moon.x,moon.y);g.rotate(-.28);const r=moon.r,ix=r*.43,iy=-r*.15,ir=r*.94,dist=Math.hypot(ix,iy),axis=Math.atan2(iy,ix),half=Math.acos((r*r-ir*ir+dist*dist)/(2*r*dist)),bottom=axis+half,top=axis-half;const tx=r*Math.cos(top),ty=r*Math.sin(top),bx=r*Math.cos(bottom),by=r*Math.sin(bottom);g.beginPath();g.arc(0,0,r,bottom,top);g.arc(ix,iy,ir,Math.atan2(ty-iy,tx-ix),Math.atan2(by-iy,bx-ix),true);g.closePath();g.fillStyle='#f3faff';g.shadowColor='#a9d7ff';g.shadowBlur=21;g.fill();g.shadowBlur=7;g.fill();g.shadowBlur=0;
+g.restore();
+
+g=live;starSprites=[false,true].map(cross=>{const c=document.createElement('canvas');c.width=c.height=48;const k=c.getContext('2d');k.fillStyle='#e6f5ff';k.shadowColor='#8bccff';k.shadowBlur=cross?9:5;k.beginPath();k.arc(24,24,2,0,TAU);k.fill();if(cross){k.strokeStyle='#d9eeff';k.lineWidth=.7;k.beginPath();k.moveTo(15,24);k.lineTo(33,24);k.moveTo(24,15);k.lineTo(24,33);k.stroke()}return c;});}
+function drawTree(){const wx=(Math.sin(time*.55)+.24*Math.sin(time*.93))*10,wy=Math.sin(time*.55+.6)*1.05,k=p=>{const s=clamp((H*1.16-p.y)/H);return{x:p.x+wx*s,y:p.y+wy*s}};
+g.save();g.lineCap='round';
+for(let pass=0;pass<3;pass++)for(const b of branches){if(pass===0&&b.width<1)continue;const a=k(b.a),c1=k(b.b),c2=k(b.c),d=k(b.d);
+g.strokeStyle=pass===0?'rgba(120,170,255,'+b.opacity*.06+')':pass===1?'rgba(150,200,255,'+b.opacity*.12+')':'rgba(238,249,255,'+Math.min(1,b.opacity*1.05)+')';
+g.lineWidth=pass===0?b.width*5+2:pass===1?b.width*2.4+1:Math.max(.8,b.width*.95);g.beginPath();g.moveTo(a.x,a.y);g.bezierCurveTo(c1.x,c1.y,c2.x,c2.y,d.x,d.y);g.stroke()}
+g.fillStyle='rgba(214,232,255,.6)';g.beginPath();for(const f of foliage){const p=k(f),r=f.r*.8;g.moveTo(p.x+r,p.y);g.arc(p.x,p.y,r,0,TAU)}g.fill();g.restore()}
+function draw(){g.setTransform(D,0,0,D,0,0);g.drawImage(backLayer,0,0,W,H);
+for(const s of stars){const tw=.2+.8*Math.pow(.5+.5*Math.sin(time*s.speed+s.phase),2);sparkle(s.x,s.y,s.r,s.a*tw,s.r>1.2)}
+for(const m of motes)sparkle(m.x+Math.sin(time*.25+m.phase)*7,m.y,m.r,(.13+.17*Math.sin(time*.7+m.phase)**2));
+drawTree();
+for(let i=0;i<branches.length;i+=9){const b=branches[i];const p=wind(b.d);sparkle(p.x,p.y,1.1,b.opacity*(.35+.25*Math.sin(time+i)**2),i%27===0)}
+for(const c of letters){if(c.held||c.gone)continue;const p=glyphPosition(c);drawText(c,p.x,p.y,clamp((time-c.born)*1.4),c.rotation+Math.sin(time*.6+c.phase)*.025);}
+for(const b of birds){if(b.state==='carry'&&b.trail.length>2){g.save();g.strokeStyle='#b9e5ff';g.shadowColor='#88caff';g.shadowBlur=8;g.lineWidth=.7;g.globalAlpha=b.alpha*.22;g.beginPath();b.trail.forEach((p,i)=>g[i?'lineTo':'moveTo'](p.x,p.y));g.stroke();g.restore()}drawBird(b);if(b.state==='carry'&&b.letter){const sway=Math.sin(time*3+b.phase*.1)*3;drawText(b.letter,b.x+6+sway,b.y+18,b.alpha,Math.sin(time*3)*.13);}}
+for(const p of dust){const f=p.life/p.max;sparkle(p.x,p.y,p.r*(1-f*.5),Math.sin(f*Math.PI)*.8,p.r>1.65)}
+}
+function frame(ms){if(document.hidden){last=ms;requestAnimationFrame(frame);return;}const dt=Math.min(.04,(ms-last)/1000)||.016;last=ms;update(dt);draw();requestAnimationFrame(frame)}let resizeTimer;addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(setup,150)});setup();requestAnimationFrame(frame);
+</script></body></html>
